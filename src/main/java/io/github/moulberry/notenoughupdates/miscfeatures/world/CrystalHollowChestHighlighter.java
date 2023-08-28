@@ -22,6 +22,7 @@ package io.github.moulberry.notenoughupdates.miscfeatures.world;
 import io.github.moulberry.notenoughupdates.NotEnoughUpdates;
 import io.github.moulberry.notenoughupdates.autosubscribe.NEUAutoSubscribe;
 import io.github.moulberry.notenoughupdates.core.util.render.RenderUtils;
+import io.github.moulberry.notenoughupdates.miscfeatures.CustomItemEffects;
 import io.github.moulberry.notenoughupdates.util.SBInfo;
 import io.github.moulberry.notenoughupdates.util.SpecialColour;
 import net.minecraft.block.Block;
@@ -33,6 +34,7 @@ import net.minecraft.network.play.server.S23PacketBlockChange;
 import net.minecraft.util.BlockPos;
 import net.minecraft.util.Vec3;
 import net.minecraft.world.World;
+import net.minecraftforge.client.event.RenderWorldEvent;
 import net.minecraftforge.client.event.RenderWorldLastEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
@@ -81,14 +83,9 @@ public class CrystalHollowChestHighlighter extends GenericBlockHighlighter {
 
 		// Here to catch chests that get highlighted by other people after they open them, and
 		// any highlighted blocks in which the chest despawned in
-		List<BlockPos> blockToRemove = new ArrayList<>();
-		highlightedBlocks.forEach(it -> {
-			if (Minecraft.getMinecraft().theWorld.getBlockState(it).getBlock() != Blocks.chest) {
-				blockToRemove.add(it);
-			}
-		});
 
-		blockToRemove.forEach(highlightedBlocks::remove);
+		highlightedBlocks.removeIf(it ->
+			Minecraft.getMinecraft().theWorld.getBlockState(it).getBlock() != Blocks.chest);
 	}
 
 	@SubscribeEvent
@@ -105,9 +102,11 @@ public class CrystalHollowChestHighlighter extends GenericBlockHighlighter {
 		World w = Minecraft.getMinecraft().theWorld;
 		if (w == null) return;
 		for (BlockPos blockPos : highlightedBlocks) {
-			RenderUtils.renderBoundingBox(blockPos, getColor(blockPos), event.partialTicks, false);
+			RenderUtils.renderBoundingBox(blockPos, getColor(blockPos), event.partialTicks, true);
+			//CustomItemEffects.drawBlock(blockPos.getX(), blockPos.getY(), blockPos.getZ(), Blocks.chest.getDefaultState(), event.partialTicks, 0.75f);
 		}
 	}
+
 
 	@Override
 	protected boolean isEnabled() {
@@ -126,5 +125,18 @@ public class CrystalHollowChestHighlighter extends GenericBlockHighlighter {
 	@Override
 	protected int getColor(BlockPos blockPos) {
 		return SpecialColour.specialToChromaRGB(NotEnoughUpdates.INSTANCE.config.world.crystalHollowChestColor);
+	}
+
+	@Override
+	public boolean tryRegisterInterest(double x, double y, double z) {
+
+		BlockPos blockPos = new BlockPos(x, y, z);
+		boolean contains = highlightedBlocks.contains(blockPos);
+		if (!contains) {
+			if (isValidHighlightSpot(blockPos)) {
+				highlightedBlocks.add(blockPos);
+			}
+		}
+		return contains;
 	}
 }

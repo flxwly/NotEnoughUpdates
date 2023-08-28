@@ -103,7 +103,7 @@ public class NotEnoughUpdates {
 	public static final String VERSION = "2.1.1-PRE";
 	public static final int VERSION_ID = 20101; //2.1.1 only so update notif works
 	public static final int PRE_VERSION_ID = 0;
-	public static final int HOTFIX_VERSION_ID = 0;
+	public static final int HOTFIX_VERSION_ID = 1;
 
 	public static final Logger LOGGER = LogManager.getLogger("NotEnoughUpdates");
 	/**
