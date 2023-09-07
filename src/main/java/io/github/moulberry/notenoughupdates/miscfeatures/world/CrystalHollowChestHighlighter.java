@@ -105,7 +105,7 @@ public class CrystalHollowChestHighlighter extends GenericBlockHighlighter {
 		World w = Minecraft.getMinecraft().theWorld;
 		if (w == null) return;
 		for (BlockPos blockPos : highlightedBlocks) {
-			RenderUtils.renderBoundingBox(blockPos, getColor(blockPos), event.partialTicks, false);
+			RenderUtils.renderBoundingBox(blockPos, getColor(blockPos), event.partialTicks, true);
 		}
 	}
 
