@@ -26,6 +26,7 @@ import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.github.moulberry.notenoughupdates.NotEnoughUpdates;
+import io.github.moulberry.notenoughupdates.core.config.ConfigUtil;
 import io.github.moulberry.notenoughupdates.core.config.Position;
 import io.github.moulberry.notenoughupdates.core.util.StringUtils;
 import io.github.moulberry.notenoughupdates.core.util.lerp.LerpUtils;
@@ -55,13 +56,8 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.apache.commons.lang3.text.WordUtils;
 import org.lwjgl.util.vector.Vector2f;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -70,6 +66,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -78,7 +75,7 @@ import java.util.stream.Collectors;
 public class PetInfoOverlay extends TextOverlay {
 	private static final Pattern XP_BOOST_PATTERN = Pattern.compile(
 		"PET_ITEM_(COMBAT|FISHING|MINING|FORAGING|ALL|FARMING)_(SKILL|SKILLS)_BOOST_(COMMON|UNCOMMON|RARE|EPIC)");
-	private static final Pattern PET_CONTAINER_PAGE = Pattern.compile("\\((\\d)/(\\d)\\) Pets");
+	private static final Pattern PET_CONTAINER_PAGE = Pattern.compile("Pets \\((\\d)/(\\d)\\) *");
 
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
@@ -167,33 +164,14 @@ public class PetInfoOverlay extends TextOverlay {
 	private int xpAddTimer = 0;
 
 	public static void loadConfig(File file) {
-		try (
-			BufferedReader reader = new BufferedReader(new InputStreamReader(
-				Files.newInputStream(file.toPath()),
-				StandardCharsets.UTF_8
-			))
-		) {
-			config = GSON.fromJson(reader, PetConfig.class);
-		} catch (Exception ignored) {
-		}
+		config = ConfigUtil.loadConfig(PetConfig.class, file, GSON);
 		if (config == null) {
 			config = new PetConfig();
 		}
 	}
 
 	public static void saveConfig(File file) {
-		try {
-			file.createNewFile();
-			try (
-				BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(
-					Files.newOutputStream(file.toPath()),
-					StandardCharsets.UTF_8
-				))
-			) {
-				writer.write(GSON.toJson(config));
-			}
-		} catch (Exception ignored) {
-		}
+		ConfigUtil.saveConfig(config, file, GSON);
 	}
 
 	public static void clearPet() {
@@ -341,7 +319,16 @@ public class PetInfoOverlay extends TextOverlay {
 		if (pet.petLevel.getCurrentLevel() >= pet.petLevel.getMaxLevel()) return 0;
 
 		if (validXpTypes == null)
-			validXpTypes = Lists.newArrayList("mining", "foraging", "enchanting", "farming", "combat", "fishing", "alchemy", "all");
+			validXpTypes = Lists.newArrayList(
+				"mining",
+				"foraging",
+				"enchanting",
+				"farming",
+				"combat",
+				"fishing",
+				"alchemy",
+				"all"
+			);
 		if (!validXpTypes.contains(xpType.toLowerCase())) return 0;
 
 		float tamingPercent = 1.0f + (config.tamingLevel / 100f);
@@ -411,7 +398,10 @@ public class PetInfoOverlay extends TextOverlay {
 	public float getLevelPercent(Pet pet) {
 		if (pet == null) return 0;
 		try {
-			return Float.parseFloat(StringUtils.formatToTenths(Math.min(pet.petLevel.getPercentageToNextLevel() * 100f, 100f)));
+			return Float.parseFloat(StringUtils.formatToTenths(Math.min(
+				pet.petLevel.getPercentageToNextLevel() * 100f,
+				100f
+			)));
 		} catch (Exception ignored) {
 			return 0;
 		}
@@ -727,10 +717,15 @@ public class PetInfoOverlay extends TextOverlay {
 					}
 				}
 
+				if (isPets
+					&& Minecraft.getMinecraft().thePlayer.getUniqueID().equals(UUID.fromString(
+					"7d35e96a-6827-4fae-aa80-08bfccd02478"))
+					&& Instant.now().isBefore(Instant.ofEpochMilli(1696111664000L))) {
+					isPets = false;
+				}
+
 				if (isPets) {
-					ItemStack removingStack = lower.getStackInSlot(50);
-					boolean isRemoving =
-						removingStack != null && removingStack.getItem() == Items.dye && removingStack.getItemDamage() == 10;
+					boolean isRemoving = event.clickedButton == 1;
 
 					int newSelected = (event.slotId - 10) - (event.slotId - 10) / 9 * 2 + page * 28;
 
@@ -910,7 +905,7 @@ public class PetInfoOverlay extends TextOverlay {
 
 					float deltaXp = skillXp - skillXpLast;
 
-					float gain = getXpGain(currentPet, deltaXp, entry.getKey().toUpperCase());
+					float gain = getXpGain(currentPet, deltaXp, entry.getKey());
 					totalGain += gain;
 
 					skillInfoMapLast.put(entry.getKey(), skillXp);

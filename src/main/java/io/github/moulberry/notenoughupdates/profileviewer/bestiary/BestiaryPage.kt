@@ -21,7 +21,7 @@ package io.github.moulberry.notenoughupdates.profileviewer.bestiary
 import io.github.moulberry.notenoughupdates.core.util.StringUtils
 import io.github.moulberry.notenoughupdates.profileviewer.GuiProfileViewer
 import io.github.moulberry.notenoughupdates.profileviewer.GuiProfileViewerPage
-import io.github.moulberry.notenoughupdates.profileviewer.bestiary.BestiaryData.calculateTotalBestiaryLevel
+import io.github.moulberry.notenoughupdates.profileviewer.bestiary.BestiaryData.calculateTotalBestiaryTiers
 import io.github.moulberry.notenoughupdates.profileviewer.bestiary.BestiaryData.hasMigrated
 import io.github.moulberry.notenoughupdates.profileviewer.bestiary.BestiaryData.parseBestiaryData
 import io.github.moulberry.notenoughupdates.util.Constants
@@ -48,21 +48,42 @@ data class Mob(
  * A Bestiary category as defined in `constants/bestiary.json`
  */
 data class Category(
-    val id: String, val name: String, val icon: ItemStack, val mobs: List<Mob>, val subCategories: List<Category>
+    val id: String,
+    val name: String,
+    val icon: ItemStack,
+    val mobs: List<Mob>,
+    val subCategories: List<Category>,
+    val familyData: FamilyData
 )
 
 /**
  * Level data for one specific mob
  */
-data class MobLevelData(val level: Int, val maxLevel: Boolean)
+data class MobLevelData(
+    val level: Int, val maxLevel: Boolean, val progress: Double, val totalProgress: Double, val mobKillData: MobKillData
+)
+
+/**
+ * Kills data for one specific mob
+ */
+data class MobKillData(
+    val tierKills: Double, val tierReq: Double, val cappedKills: Double, val cap: Double
+)
+
+/**
+ * Family data for one specific category
+ */
+data class FamilyData(
+    val found: Int, val completed: Int, val total: Int
+)
 
 class BestiaryPage(instance: GuiProfileViewer?) : GuiProfileViewerPage(instance) {
     private var selectedCategory = "dynamic"
-    private var lastSelectedCategory = ""
     private var selectedSubCategory = ""
     private var tooltipToDisplay: MutableList<String> = mutableListOf()
-    private var bestiaryLevel = 0
+    private var bestiaryLevel = 0.0
     private var computedCategories: MutableList<Category> = mutableListOf()
+    private var lastProfileName = ""
 
     private val bestiaryTexture = ResourceLocation("notenoughupdates:pv_bestiary_tab.png")
     private val mobListXCount = 9
@@ -74,8 +95,9 @@ class BestiaryPage(instance: GuiProfileViewer?) : GuiProfileViewerPage(instance)
         val guiLeft = GuiProfileViewer.getGuiLeft()
         val guiTop = GuiProfileViewer.getGuiTop()
 
-        val selectedProfile = selectedProfile ?: return
+        val selectedProfile = GuiProfileViewer.getSelectedProfile() ?: return
         val profileInfo = selectedProfile.profileJson
+        val profileName = GuiProfileViewer.getProfileName()
 
         if (!hasMigrated(profileInfo) || Constants.BESTIARY == null) {
             Utils.drawStringCentered(
@@ -85,13 +107,28 @@ class BestiaryPage(instance: GuiProfileViewer?) : GuiProfileViewerPage(instance)
                 true,
                 0
             )
+            lastProfileName = profileName
             return
         }
-        // Do the initial parsing only once
-        if (computedCategories.isEmpty()) {
+        // Do the initial parsing only once or on profile switch
+        if (computedCategories.isEmpty() || lastProfileName != profileName) {
             computedCategories = parseBestiaryData(profileInfo)
-            bestiaryLevel = calculateTotalBestiaryLevel(computedCategories)
+            bestiaryLevel = calculateTotalBestiaryTiers(computedCategories).toDouble()
         }
+
+        if (computedCategories.isEmpty() || Constants.BESTIARY == null) {
+            Utils.drawStringCentered(
+                "${EnumChatFormatting.RED}No valid bestiary data!",
+                guiLeft + 431 / 2f,
+                (guiTop + 101).toFloat(),
+                true,
+                0
+            )
+            lastProfileName = profileName
+            return
+        }
+        lastProfileName = profileName
+
         val bestiarySize = computedCategories.size
         val bestiaryXSize = (350f / (bestiarySize - 1 + 0.0000001f)).toInt()
 
@@ -104,7 +141,7 @@ class BestiaryPage(instance: GuiProfileViewer?) : GuiProfileViewerPage(instance)
                 mouseX < guiLeft + 30 + bestiaryXSize * categoryXIndex + 20
                 && mouseY > guiTop + 10 && mouseY < guiTop + 10 + 20
             ) {
-                tooltipToDisplay = category.icon.getTooltip(Minecraft.getMinecraft().thePlayer, false)
+                tooltipToDisplay.add(EnumChatFormatting.GRAY.toString() + category.name)
                 if (Mouse.getEventButtonState() && selectedCategory != category.id) {
                     selectedCategory = category.id
                     Utils.playPressSound()
@@ -150,7 +187,7 @@ class BestiaryPage(instance: GuiProfileViewer?) : GuiProfileViewerPage(instance)
         val color = Color(128, 128, 128, 255)
         Utils.renderAlignedString(
             EnumChatFormatting.RED.toString() + "Milestone: ",
-            "${EnumChatFormatting.GRAY}${(bestiaryLevel / 10) - 1}",
+            "${EnumChatFormatting.GRAY}${(bestiaryLevel / 10)}",
             (guiLeft + 280).toFloat(),
             (guiTop + 50).toFloat(),
             110
@@ -215,6 +252,64 @@ class BestiaryPage(instance: GuiProfileViewer?) : GuiProfileViewerPage(instance)
             selectedSubCategory = ""
         }
 
+        // Render family information
+        var catData = selectedCategory.familyData
+        Utils.renderAlignedString(
+            EnumChatFormatting.RED.toString() + "Families Found:",
+            (if (catData.found == catData.total) "§6" else "§7") + "${catData.found}/${catData.total}",
+            guiLeft + 280F,
+            guiTop + 70F,
+            110
+        )
+        if (catData.found == catData.total) {
+            instance.renderGoldBar(guiLeft + 280F, guiTop + 80F, 112F)
+        } else {
+            instance.renderBar(guiLeft + 280F, guiTop + 80F, 112F, catData.found / catData.total.toFloat())
+        }
+
+        Utils.renderAlignedString(
+            EnumChatFormatting.RED.toString() + "Families Completed:",
+            (if (catData.completed == catData.total) "§6" else "§7") + "${catData.completed}/${catData.total}",
+            guiLeft + 280F,
+            guiTop + 90F,
+            110
+        )
+        if (catData.completed == catData.total) {
+            instance.renderGoldBar(guiLeft + 280F, guiTop + 100F, 112F)
+        } else {
+            instance.renderBar(guiLeft + 280F, guiTop + 100F, 112F, catData.completed / catData.total.toFloat())
+        }
+
+        // Render subcategory family information, if possible
+        if (selectedSubCategory != "") {
+            catData = selectedCategory.subCategories.find { it.id == selectedSubCategory }!!.familyData
+            Utils.renderAlignedString(
+                EnumChatFormatting.RED.toString() + "Families Found:",
+                (if (catData.found == catData.total) "§6" else "§7") + "${catData.found}/${catData.total}",
+                guiLeft + 280F,
+                guiTop + 120F,
+                110
+            )
+            if (catData.found == catData.total) {
+                instance.renderGoldBar(guiLeft + 280F, guiTop + 130F, 112F)
+            } else {
+                instance.renderBar(guiLeft + 280F, guiTop + 130F, 112F, catData.found / catData.total.toFloat())
+            }
+
+            Utils.renderAlignedString(
+                EnumChatFormatting.RED.toString() + "Families Completed:",
+                (if (catData.completed == catData.total) "§6" else "§7") + "${catData.completed}/${catData.total}",
+                guiLeft + 280F,
+                guiTop + 140F,
+                110
+            )
+            if (catData.completed == catData.total) {
+                instance.renderGoldBar(guiLeft + 280F, guiTop + 150F, 112F)
+            } else {
+                instance.renderBar(guiLeft + 280F, guiTop + 150F, 112F, catData.completed / catData.total.toFloat())
+            }
+        }
+
         // Determine which mobs should be displayed
         val mobs = if (selectedSubCategory != "") {
             selectedCategory.subCategories.first { it.id == selectedSubCategory }.mobs
@@ -229,7 +324,6 @@ class BestiaryPage(instance: GuiProfileViewer?) : GuiProfileViewerPage(instance)
             val yIndex = i / mobListXCount
             val x = 23 + mobListXPadding + (mobListXPadding + 20) * xIndex
             val y = 30 + mobListYPadding + (mobListYPadding + 20) * yIndex
-            val completedness = 0f
 
             GlStateManager.disableLighting()
             RenderHelper.enableGUIStandardItemLighting()
@@ -239,24 +333,11 @@ class BestiaryPage(instance: GuiProfileViewer?) : GuiProfileViewerPage(instance)
                 guiLeft + x,
                 guiTop + y,
                 20f,
-                20 * (1 - completedness),
-                0f,
-                20 / 256f,
-                0f,
-                20 * (1 - completedness) / 256f,
-                GL11.GL_NEAREST
-            )
-            //GlStateManager.color(1, 185 / 255f, 0, 1);
-            Minecraft.getMinecraft().textureManager.bindTexture(GuiProfileViewer.pv_elements)
-            Utils.drawTexturedRect(
-                guiLeft + x,
-                guiTop + y + 20 * (1 - completedness),
                 20f,
-                20 * completedness,
                 0f,
                 20 / 256f,
-                20 * (1 - completedness) / 256f,
-                20 / 256f,
+                0f,
+                20f / 256f,
                 GL11.GL_NEAREST
             )
             Utils.drawItemStack(stack, guiLeft + x.toInt() + 2, guiTop + y.toInt() + 2)
@@ -276,6 +357,47 @@ class BestiaryPage(instance: GuiProfileViewer?) : GuiProfileViewerPage(instance)
                     tooltipToDisplay.add(
                         EnumChatFormatting.GRAY.toString() + "Deaths: " + EnumChatFormatting.GREEN +
                                 StringUtils.formatNumber(deaths)
+                    )
+                    tooltipToDisplay.add("")
+
+                    if (!mob.mobLevelData.maxLevel) {
+                        tooltipToDisplay.add(
+                            EnumChatFormatting.GRAY.toString() + "Progress to Tier ${mob.mobLevelData.level + 1}: " +
+                                    EnumChatFormatting.AQUA + "${mob.mobLevelData.progress}%"
+                        )
+
+                        var bar = "§3§l§m"
+                        for (j in 1..14) {
+                            var col = ""
+                            if (mob.mobLevelData.progress < j * (100 / 14)) col = "§f§l§m"
+                            bar += "$col "
+                        }
+                        tooltipToDisplay.add(
+                            "${bar}§r§b ${StringUtils.formatNumber(mob.mobLevelData.mobKillData.tierKills)}/${
+                                StringUtils.formatNumber(
+                                    mob.mobLevelData.mobKillData.tierReq
+                                )
+                            }"
+                        )
+                        tooltipToDisplay.add("")
+                    }
+
+                    tooltipToDisplay.add(
+                        EnumChatFormatting.GRAY.toString() + "Overall Progress: " + EnumChatFormatting.AQUA + "${mob.mobLevelData.totalProgress}%" +
+                                if (mob.mobLevelData.maxLevel) " §7(§c§lMAX!§r§7)" else ""
+                    )
+                    var bar = "§3§l§m"
+                    for (j in 1..14) {
+                        var col = ""
+                        if (mob.mobLevelData.totalProgress < j * (100 / 14)) col = "§f§l§m"
+                        bar += "$col "
+                    }
+                    tooltipToDisplay.add(
+                        "${bar}§r§b ${StringUtils.formatNumber(mob.mobLevelData.mobKillData.cappedKills)}/${
+                            StringUtils.formatNumber(
+                                mob.mobLevelData.mobKillData.cap
+                            )
+                        }"
                     )
                 }
             }
