@@ -120,7 +120,7 @@ public class RiftPage extends GuiProfileViewerPage {
 		Utils.drawTexturedRect(guiLeft + 35, guiTop + 156, 20, 20, 0, 20 / 256f, 0, 20 / 256f, GL11.GL_NEAREST);
 
 		JsonObject deadCats = riftData.getAsJsonObject("dead_cats");
-		if (!deadCats.entrySet().isEmpty() && deadCats.has("found_cats")) {
+		if (deadCats != null && !deadCats.entrySet().isEmpty() && deadCats.has("found_cats")) {
 			JsonArray foundCats = deadCats.getAsJsonArray("found_cats");
 
 			int size = foundCats.size();
@@ -213,15 +213,9 @@ public class RiftPage extends GuiProfileViewerPage {
 			renderItem("GLASS", 316, 36, guiLeft, guiTop);
 		}
 
-		JsonObject castleData = riftData.getAsJsonObject("castle");
+		int grubberStacks = Utils.getElementAsInt(Utils.getElement(profileInfo, "rift.castle.grubber_stacks"), 0);
 
-		int grubberStacks = 0;
-		if (castleData.has("grubber_stacks")) {
-			grubberStacks = castleData.get("grubber_stacks").getAsInt();
-		}
-
-		Utils.renderAlignedString(
-			EnumChatFormatting.GOLD + "Burger:",
+		Utils.renderAlignedString(EnumChatFormatting.GOLD + "Burger:",
 			EnumChatFormatting.WHITE.toString() + grubberStacks + "/5",
 			guiLeft + 331,
 			guiTop + 87,
